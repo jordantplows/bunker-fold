@@ -1,33 +1,64 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "bunker-fold"
 version = "0.1.0"
-description = "Python wrapper for the Bunker API"
+description = "Universal inference package for biological foundation models"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Jordan Plows", email = "jordan@example.com"}
 ]
-keywords = ["bunker", "api", "wrapper"]
+keywords = ["protein", "structure", "prediction", "esm", "boltz", "alphafold", "machine-learning", "biology"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
-    "requests>=2.31.0",
-    "pydantic>=2.0.0",
+    "numpy>=1.24.0",
+    "huggingface-hub>=0.20.0",
+    "click>=8.1.0",
 ]
 
 [project.optional-dependencies]
+# ESM family models
+esm = [
+    "torch>=2.0.0",
+    "fair-esm>=2.0.0",
+]
+
+# Boltz-1 structure prediction
+boltz = [
+    "torch>=2.0.0",
+    "boltz>=0.2.0",
+]
+
+# ProteinMPNN sequence design
+proteinmpnn = [
+    "torch>=2.0.0",
+    "biopython>=1.81",
+]
+
+# Install all models
+all = [
+    "torch>=2.0.0",
+    "fair-esm>=2.0.0",
+    "boltz>=0.2.0",
+    "biopython>=1.81",
+]
+
+# Development dependencies
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -35,6 +66,8 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.5.0",
     "black>=23.9.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
 ]
 
 [project.urls]
@@ -43,23 +76,33 @@ Documentation = "https://github.com/yourusername/bunker-fold#readme"
 Repository = "https://github.com/yourusername/bunker-fold"
 Issues = "https://github.com/yourusername/bunker-fold/issues"
 
-[tool.setuptools]
-packages = ["bunker_fold"]
+[project.scripts]
+bunker = "bunker.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bunker"]
 
 [tool.black]
 line-length = 88
-target-version = ["py311", "py312", "py313"]
+target-version = ["py310", "py311", "py312"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=bunker_fold --cov-report=term-missing"
+addopts = "--cov=bunker --cov-report=term-missing"
+markers = [
+    "slow: marks tests as slow (requiring model downloads or GPU)",
+]
