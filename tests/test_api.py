@@ -5,13 +5,7 @@ from fastapi.testclient import TestClient
 
 from bunker.api.app import app
 
-TEST_KEY = "t" * 32
-client = TestClient(app, headers={"Authorization": f"Bearer {TEST_KEY}"})
-
-
-@pytest.fixture(autouse=True)
-def api_key(monkeypatch):
-    monkeypatch.setenv("BUNKER_API_KEY", TEST_KEY)
+client = TestClient(app)
 
 
 def test_root():
@@ -27,7 +21,6 @@ def test_health_check():
     """Test health check endpoint."""
     # Manually set start_time for test context
     import time
-
     app.state.start_time = time.time()
 
     response = client.get("/health")

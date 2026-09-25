@@ -1,14 +1,15 @@
 """Structure prediction endpoints."""
 
+from typing import List
 from fastapi import APIRouter, HTTPException, Request, status
 
-from bunker.api.model_cache import ModelTooLargeError, get_or_load_model
 from bunker.api.schemas import (
-    StructureData,
     StructurePredictionRequest,
     StructurePredictionResponse,
+    StructureData,
     Usage,
 )
+from bunker.loader import load
 
 router = APIRouter()
 
@@ -57,27 +58,27 @@ async def predict_structures(request: Request, body: StructurePredictionRequest)
     if meta.task != "structure":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Model '{body.model}' is not a structure prediction model "
-                f"(task: {meta.task})"
-            ),
+            detail=f"Model '{body.model}' is not a structure prediction model (task: {meta.task})",
         )
 
     # Load model (from cache or fresh)
     model_cache = request.app.state.model_cache
-    try:
-        model = get_or_load_model(model_cache, body.model)
-    except ModelTooLargeError as e:
-        raise HTTPException(status_code=413, detail=str(e))
-    except ImportError as e:
-        raise HTTPException(
-            status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load model: {str(e)}",
-        )
+    if body.model not in model_cache:
+        try:
+            model = load(body.model, device="auto")
+            model_cache[body.model] = model
+        except ImportError as e:
+            raise HTTPException(
+                status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                detail=str(e),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to load model: {str(e)}",
+            )
+    else:
+        model = model_cache[body.model]
 
     # Predict structures
     try:

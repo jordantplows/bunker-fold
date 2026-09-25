@@ -1,134 +1,97 @@
-"""Boltz-1 structure prediction through its supported command-line interface."""
+"""Boltz-1 structure prediction model integration."""
 
-import json
-import shutil
-import subprocess
-import sys
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 from bunker.registry import register_model
 
 
 class BoltzWrapper:
-    """Run Boltz-1 predictions in isolated temporary directories."""
+    """Wrapper for Boltz-1 providing consistent interface."""
 
-    def __init__(self, executable: str, cache_dir: Path, device: str):
-        self.executable = executable
-        self.cache_dir = cache_dir
+    def __init__(self, model: Any, device: str):
+        """Initialize Boltz wrapper.
+
+        Args:
+            model: Boltz model instance
+            device: Device string
+        """
+        self.model = model
         self.device = device
 
     def predict(
-        self, sequences: str | list[str], temperature: float = 1.0
-    ) -> list[dict[str, Any]]:
-        """Predict structures with Boltz-1's single-sequence mode."""
+        self, sequences: Union[str, List[str]], temperature: float = 1.0
+    ) -> List[Dict[str, Any]]:
+        """Predict protein structures from sequences.
+
+        Args:
+            sequences: Single sequence or list of sequences
+            temperature: Sampling temperature
+
+        Returns:
+            List of structure dictionaries with PDB and confidence scores
+        """
+        # Normalize to list
         if isinstance(sequences, str):
             sequences = [sequences]
-        accelerator = "gpu" if self.device == "cuda" else "cpu"
-        if self.device not in {"cuda", "cpu"}:
-            raise ValueError(f"Boltz does not support device '{self.device}'")
 
         results = []
-        for sequence in sequences:
-            with TemporaryDirectory(prefix="bunker-boltz-") as temporary:
-                directory = Path(temporary)
-                input_file = directory / "input.yaml"
-                # JSON is valid YAML. An explicit empty MSA avoids an implicit
-                # external sequence-search request from the Boltz CLI.
-                input_file.write_text(
-                    json.dumps(
-                        {
-                            "version": 1,
-                            "sequences": [
-                                {
-                                    "protein": {
-                                        "id": "A",
-                                        "sequence": sequence,
-                                        "msa": "empty",
-                                    }
-                                }
-                            ],
-                        }
-                    )
-                )
-                command = [
-                    self.executable,
-                    "predict",
-                    str(input_file),
-                    "--out_dir",
-                    str(directory),
-                    "--cache",
-                    str(self.cache_dir),
-                    "--model",
-                    "boltz1",
-                    "--output_format",
-                    "pdb",
-                    "--accelerator",
-                    accelerator,
-                    "--num_workers",
-                    "0",
-                    "--no_kernels",
-                ]
-                try:
-                    subprocess.run(
-                        command,
-                        check=True,
-                        timeout=600,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                except subprocess.CalledProcessError as error:
-                    raise RuntimeError(
-                        f"Boltz prediction failed with exit code {error.returncode}"
-                    ) from error
-                except subprocess.TimeoutExpired as error:
-                    raise RuntimeError(
-                        "Boltz prediction exceeded 10 minutes"
-                    ) from error
+        for seq in sequences:
+            # Run Boltz inference
+            output = self.model.predict(seq, temperature=temperature)
 
-                pdb_file = (
-                    directory
-                    / "boltz_results_input"
-                    / "predictions"
-                    / "input"
-                    / "input_model_0.pdb"
-                )
-                if not pdb_file.is_file():
-                    raise RuntimeError("Boltz did not produce a PDB structure")
-                pdb = pdb_file.read_text()
-                plddt = [
-                    float(line[60:66])
-                    for line in pdb.splitlines()
-                    if line.startswith("ATOM") and line[12:16].strip() == "CA"
-                ]
-                results.append(
-                    {
-                        "pdb": pdb,
-                        "plddt": plddt or None,
-                        "mean_plddt": sum(plddt) / len(plddt) if plddt else None,
-                    }
-                )
+            # Extract PDB and confidence
+            pdb_string = output.get("pdb", "")
+            plddt = output.get("confidence", [])
+            mean_plddt = sum(plddt) / len(plddt) if plddt else None
+
+            results.append(
+                {
+                    "pdb": pdb_string,
+                    "plddt": plddt if plddt else None,
+                    "mean_plddt": mean_plddt,
+                }
+            )
+
         return results
 
 
 def load_boltz(
     name: str,
     device: str,
-    dtype: str | None,
+    dtype: Optional[str],
     cache_dir: Any,
     **kwargs: Any,
 ) -> BoltzWrapper:
-    """Find the CLI supplied by the Boltz package."""
-    executable = Path(sys.executable).with_name("boltz")
-    if not executable.is_file():
-        found = shutil.which("boltz")
-        if not found:
-            raise ImportError("Install the 'boltz' extra to use Boltz-1")
-        executable = Path(found)
-    return BoltzWrapper(str(executable), Path(cache_dir), device)
+    """Load Boltz-1 model.
+
+    Args:
+        name: Model name
+        device: Device to load on
+        dtype: Data type
+        cache_dir: Cache directory
+        **kwargs: Additional arguments
+
+    Returns:
+        BoltzWrapper instance
+    """
+    # Note: This is a placeholder implementation
+    # The actual Boltz integration requires the boltz package
+    try:
+        import boltz
+
+        model = boltz.Boltz1.from_pretrained("boltz-1", cache_dir=str(cache_dir))
+        model = model.to(device)
+        model.eval()
+
+        return BoltzWrapper(model, device)
+    except ImportError:
+        raise ImportError(
+            "Boltz integration requires the 'boltz' package. "
+            "Install with: pip install 'bunker-fold[boltz]'"
+        )
 
 
+# Register Boltz-1
 register_model(
     name="boltz_1",
     description="Boltz-1 unified biomolecular structure prediction",

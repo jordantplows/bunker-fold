@@ -35,23 +35,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# ESM-2 embedding models
+# ESM family models
 esm = [
-    "torch>=2.3,<2.4",
+    "torch>=2.0.0",
     "fair-esm>=2.0.0",
-]
-
-# ESMFold uses the Transformers implementation, which supports Python 3.10+
-# without the original fair-esm OpenFold build requirements.
-esmfold = [
-    "torch>=2.3,<2.4",
-    "transformers>=4.45.2,<4.46",
 ]
 
 # Boltz-1 structure prediction
 boltz = [
-    "torch>=2.3,<2.4",
-    "boltz>=2.2.1,<3",
+    "torch>=2.0.0",
+    "boltz>=0.2.0",
 ]
 
 # ProteinMPNN sequence design
@@ -62,10 +55,9 @@ proteinmpnn = [
 
 # Install all models
 all = [
-    "torch>=2.3,<2.4",
+    "torch>=2.0.0",
     "fair-esm>=2.0.0",
-    "transformers>=4.45.2,<4.46",
-    "boltz>=2.2.1,<3",
+    "boltz>=0.2.0",
     "biopython>=1.81",
 ]
 

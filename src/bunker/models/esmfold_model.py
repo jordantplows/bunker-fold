@@ -1,7 +1,6 @@
 """ESMFold structure prediction model integration."""
 
-from typing import Any
-
+from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
 from bunker.registry import register_model
@@ -21,8 +20,8 @@ class ESMFoldWrapper:
         self.device = device
 
     def predict(
-        self, sequences: str | list[str], temperature: float = 1.0
-    ) -> list[dict[str, Any]]:
+        self, sequences: Union[str, List[str]], temperature: float = 1.0
+    ) -> List[Dict[str, Any]]:
         """Predict protein structures from sequences.
 
         Args:
@@ -43,27 +42,11 @@ class ESMFoldWrapper:
             with torch.no_grad():
                 output = self.model.infer(seq)
 
-            # Transformers returns confidence in [0, 1]; expose conventional
-            # pLDDT scores in [0, 100], including PDB B factors.
-            output["plddt"] = output["plddt"] * 100
-            from transformers.models.esm.openfold_utils import (
-                OFProtein,
-                atom14_to_atom37,
-                to_pdb,
-            )
+            # Extract PDB string
+            pdb_string = self.model.output_to_pdb(output)[0]
 
-            positions = atom14_to_atom37(output["positions"][-1], output)[0]
-            protein = OFProtein(
-                aatype=output["aatype"][0].cpu().numpy(),
-                atom_positions=positions.cpu().numpy(),
-                atom_mask=output["atom37_atom_exists"][0].cpu().numpy(),
-                residue_index=output["residue_index"][0].cpu().numpy() + 1,
-                b_factors=output["plddt"][0].cpu().numpy(),
-            )
-            pdb_string = to_pdb(protein)
-
-            # Atom index 1 is CA. The API returns one confidence per residue.
-            plddt = output["plddt"][0, :, 1].cpu().numpy()
+            # Extract pLDDT scores
+            plddt = output["plddt"][0].cpu().numpy()
             mean_plddt = float(np.mean(plddt))
 
             results.append(
@@ -80,7 +63,7 @@ class ESMFoldWrapper:
 def load_esmfold(
     name: str,
     device: str,
-    dtype: str | None,
+    dtype: Optional[str],
     cache_dir: Any,
     **kwargs: Any,
 ) -> ESMFoldWrapper:
@@ -96,15 +79,16 @@ def load_esmfold(
     Returns:
         ESMFoldWrapper instance
     """
-    from transformers import EsmForProteinFolding
+    import torch
+    import esm
 
-    model = EsmForProteinFolding.from_pretrained(
-        "facebook/esmfold_v1", cache_dir=str(cache_dir)
-    )
+    # Load ESMFold model
+    model = esm.pretrained.esmfold_v1()
     model = model.to(device)
     model.eval()
 
-    model.trunk.set_chunk_size(128)
+    # Set trunk to inference mode
+    model.set_chunk_size(128)
 
     return ESMFoldWrapper(model, device)
 
@@ -114,7 +98,7 @@ register_model(
     name="esmfold",
     description="ESMFold structure prediction model",
     task="structure",
-    extra="esmfold",
+    extra="esm",
     loader=load_esmfold,
     weights_url="facebook/esmfold_v1",
     license="MIT",
