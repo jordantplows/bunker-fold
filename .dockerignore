@@ -25,4 +25,5 @@ env/
 .DS_Store
 .vscode/
 .idea/
+README.md
 tests/
