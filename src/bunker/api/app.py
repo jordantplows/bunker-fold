@@ -84,10 +84,12 @@ async def global_exception_handler(request, exc):
 @app.get("/health", tags=["System"])
 async def health_check():
     """Health check endpoint."""
+    start_time = getattr(app.state, "start_time", time.time())
+    model_cache = getattr(app.state, "model_cache", {})
     return {
         "status": "healthy",
-        "uptime": time.time() - app.state.start_time,
-        "models_loaded": len(app.state.model_cache),
+        "uptime": time.time() - start_time,
+        "models_loaded": len(model_cache),
     }
 
 

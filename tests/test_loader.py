@@ -24,7 +24,9 @@ def test_get_cache_dir_custom(monkeypatch):
 
 def test_get_device_auto_cpu():
     """Test automatic device selection falls back to CPU."""
-    with patch("bunker.loader.torch", None):
+    # Mock torch import to raise ImportError
+    import sys
+    with patch.dict(sys.modules, {"torch": None}):
         device = get_device("auto")
         assert device == "cpu"
 

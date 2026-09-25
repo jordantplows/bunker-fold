@@ -51,10 +51,17 @@ async def get_model(model_id: str):
     Returns:
         Model information card
     """
+    from fastapi import HTTPException, status
     from bunker.registry import get_model_info
 
     # Verify model exists
-    meta = get_model_info(model_id)
+    try:
+        meta = get_model_info(model_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
 
     return ModelCard(
         id=model_id,
