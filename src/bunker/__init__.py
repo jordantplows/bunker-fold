@@ -12,6 +12,9 @@ __author__ = "Jordan Plows"
 from bunker.loader import load
 from bunker.registry import list_models, get_model_info
 
+# Register all models
+from bunker import models as _models  # noqa: F401
+
 __all__ = [
     "load",
     "list_models",

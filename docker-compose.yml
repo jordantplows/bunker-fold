@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  bunker-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - BUNKER_CACHE=/cache
+    volumes:
+      - bunker-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  bunker-cache:
+    driver: local
