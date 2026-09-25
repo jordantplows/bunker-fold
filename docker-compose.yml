@@ -9,6 +9,7 @@ services:
       - "8000:8000"
     environment:
       - BUNKER_CACHE=/cache
+      - BUNKER_API_KEY=${BUNKER_API_KEY:?Set BUNKER_API_KEY before starting}
     volumes:
       - bunker-cache:/cache
     deploy:

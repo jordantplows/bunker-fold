@@ -27,7 +27,8 @@ Bunker provides a unified REST API for running protein embedding, structure pred
 pip install bunker-fold
 
 # With specific models
-pip install "bunker-fold[esm]"      # ESM-2 + ESMFold
+pip install "bunker-fold[esm]"      # ESM-2 embeddings
+pip install "bunker-fold[esmfold]"  # ESMFold structure prediction
 pip install "bunker-fold[boltz]"    # Boltz-1
 pip install "bunker-fold[all]"      # All models
 ```
@@ -36,9 +37,10 @@ pip install "bunker-fold[all]"      # All models
 
 ```bash
 # Start the API server
+export BUNKER_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 bunker serve --host 0.0.0.0 --port 8000
 
-# Or with Docker
+# Or with Docker (pass the same API key through the environment)
 docker-compose up
 ```
 
@@ -49,12 +51,13 @@ The API will be available at `http://localhost:8000` with interactive docs at `/
 ### Python Client
 
 ```python
+import os
 from openai import OpenAI
 
 # Point to your Bunker instance
 client = OpenAI(
     base_url="http://localhost:8000/v1",
-    api_key="not-needed"  # Bunker doesn't require auth by default
+    api_key=os.environ["BUNKER_API_KEY"]
 )
 
 # Generate protein embeddings
@@ -80,6 +83,7 @@ curl http://localhost:8000/v1/models
 
 # Generate embeddings
 curl -X POST http://localhost:8000/v1/embeddings \
+  -H "Authorization: Bearer $BUNKER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "esm2_t33_650M",
@@ -88,6 +92,7 @@ curl -X POST http://localhost:8000/v1/embeddings \
 
 # Predict structure
 curl -X POST http://localhost:8000/v1/completions \
+  -H "Authorization: Bearer $BUNKER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "esmfold",
@@ -105,9 +110,11 @@ curl -X POST http://localhost:8000/v1/completions \
 | `esm2_t33_650M` | Embedding | `esm` | 4 GB | ✅ |
 | `esm2_t36_3B` | Embedding | `esm` | 12 GB | ✅ |
 | `esm2_t48_15B` | Embedding | `esm` | 60 GB | ✅ |
-| `esmfold` | Structure | `esm` | 16 GB | ✅ |
+| `esmfold` | Structure | `esmfold` | 16 GB | ✅ |
 | `boltz_1` | Structure | `boltz` | 20 GB | ⚠️ Experimental |
 | `proteinmpnn` | Design | `proteinmpnn` | 4 GB | 🚧 Coming Soon |
+
+Boltz-1 predictions use single-sequence mode because this API does not accept an MSA.
 
 ## API Endpoints
 
@@ -199,7 +206,7 @@ List all available models.
 docker build -t bunker-api .
 
 # Run with GPU
-docker run --gpus all -p 8000:8000 bunker-api
+docker run --gpus all -e BUNKER_API_KEY -p 8000:8000 bunker-api
 
 # Or use docker-compose
 docker-compose up -d
@@ -237,8 +244,13 @@ def web():
 ### Environment Variables
 
 - `BUNKER_CACHE`: Cache directory for model weights (default: `~/.cache/bunker`)
+- `BUNKER_API_KEY`: Required bearer token of at least 32 characters for every `/v1` endpoint. The server refuses to start without it.
+- `BUNKER_CORS_ORIGINS`: Optional comma-separated list of trusted browser origins; browser cross-origin access is disabled by default.
+- `BUNKER_MAX_MODEL_MEMORY_GB`: Maximum estimated size of a model a worker may load (default: 24 GB). Increase only when the host has enough memory.
 - `HOST`: Server host (default: `0.0.0.0`)
 - `PORT`: Server port (default: `8000`)
+
+Inference requests are limited to 64 KiB, four sequences, 1,024 residues per sequence, and 2,048 residues total. Each worker caches one model. The 15B ESM-2 model exceeds the default model memory budget.
 
 ### CLI Commands
 
