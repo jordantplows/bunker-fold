@@ -7,29 +7,25 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install Python 3.11
+# Ubuntu 22.04 provides a stable Python 3.10 runtime.
 RUN apt-get update && apt-get install -y \
-    python3.11 \
-    python3.11-dev \
-    python3-pip \
+    python3 \
+    python3-venv \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create symbolic link for python
-RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
 
-# Install dependencies
-COPY pyproject.toml /app/
-RUN pip install --upgrade pip && \
-    pip install -e . && \
-    pip install ".[esm,boltz]"
-
-# Copy application code
+# Copy everything required by Hatchling before installing the package.
+COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
 COPY LICENSE CHANGELOG.md /app/
+RUN python -m pip install --upgrade pip && \
+    python -m pip install ".[esm,esmfold,boltz]"
 
 # Create cache directory
 RUN mkdir -p /root/.cache/bunker

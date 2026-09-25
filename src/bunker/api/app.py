@@ -1,25 +1,30 @@
 """FastAPI application for biological model inference."""
 
+import os
 import time
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from bunker.api.limits import max_model_memory_gb
 from bunker.api.routes import embeddings, models, structures
-from bunker.api.schemas import ErrorResponse, ErrorDetail
-
+from bunker.api.schemas import ErrorDetail, ErrorResponse
+from bunker.api.security import RequestSizeLimitMiddleware, require_api_key
 
 # Model cache - loaded models are kept in memory
-model_cache: Dict[str, Any] = {}
+model_cache: dict[str, Any] = {}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for the FastAPI app."""
     # Startup
+    if len(os.environ.get("BUNKER_API_KEY", "")) < 32:
+        raise RuntimeError("Set BUNKER_API_KEY to at least 32 characters")
+    max_model_memory_gb()
     app.state.model_cache = model_cache
     app.state.start_time = time.time()
     yield
@@ -41,14 +46,19 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# Add CORS middleware
+# Cross-origin access must be explicitly configured for trusted frontends.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.environ.get("BUNKER_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(RequestSizeLimitMiddleware)
 
 
 # Exception handler for errors
@@ -94,9 +104,14 @@ async def health_check():
 
 
 # Include routers
-app.include_router(models.router, prefix="/v1", tags=["Models"])
-app.include_router(embeddings.router, prefix="/v1", tags=["Embeddings"])
-app.include_router(structures.router, prefix="/v1", tags=["Structures"])
+auth = [Depends(require_api_key)]
+app.include_router(models.router, prefix="/v1", tags=["Models"], dependencies=auth)
+app.include_router(
+    embeddings.router, prefix="/v1", tags=["Embeddings"], dependencies=auth
+)
+app.include_router(
+    structures.router, prefix="/v1", tags=["Structures"], dependencies=auth
+)
 
 
 @app.get("/", tags=["System"])

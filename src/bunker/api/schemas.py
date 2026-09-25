@@ -1,7 +1,28 @@
 """OpenAPI-compatible schemas for biological models."""
 
-from typing import List, Literal, Optional, Union
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+from bunker.api.limits import (
+    MAX_BATCH_SIZE,
+    MAX_SEQUENCE_LENGTH,
+    MAX_TOTAL_RESIDUES,
+)
+
+
+def validate_sequences(value: str | list[str]) -> str | list[str]:
+    """Bound the work a single inference request can trigger."""
+    sequences = [value] if isinstance(value, str) else value
+    if not sequences or len(sequences) > MAX_BATCH_SIZE:
+        raise ValueError(f"Provide between 1 and {MAX_BATCH_SIZE} sequences")
+    if any(
+        not sequence or len(sequence) > MAX_SEQUENCE_LENGTH for sequence in sequences
+    ):
+        raise ValueError(f"Each sequence must contain 1-{MAX_SEQUENCE_LENGTH} residues")
+    if sum(map(len, sequences)) > MAX_TOTAL_RESIDUES:
+        raise ValueError(f"A request may contain at most {MAX_TOTAL_RESIDUES} residues")
+    return value
 
 
 # ============================================================================
@@ -23,7 +44,7 @@ class EmbeddingData(BaseModel):
     """Single embedding result."""
 
     object: Literal["embedding"] = "embedding"
-    embedding: List[float] = Field(..., description="Embedding vector")
+    embedding: list[float] = Field(..., description="Embedding vector")
     index: int = Field(..., description="Index in the batch")
 
 
@@ -33,20 +54,23 @@ class EmbeddingRequest(BaseModel):
     model: str = Field(
         ..., description="Model ID (e.g., 'esm2_t33_650M', 'esm2_t36_3B')"
     )
-    input: Union[str, List[str]] = Field(
-        ..., description="Protein sequence(s) to embed"
-    )
+    input: str | list[str] = Field(..., description="Protein sequence(s) to embed")
     encoding_format: Literal["float", "base64"] = Field(
         default="float", description="Format of returned embeddings"
     )
-    user: Optional[str] = Field(default=None, description="User identifier")
+    user: str | None = Field(default=None, description="User identifier")
+
+    @field_validator("input")
+    @classmethod
+    def check_input(cls, value: str | list[str]) -> str | list[str]:
+        return validate_sequences(value)
 
 
 class EmbeddingResponse(BaseModel):
     """Response for embedding generation (OpenAI-compatible)."""
 
     object: Literal["list"] = "list"
-    data: List[EmbeddingData] = Field(..., description="List of embeddings")
+    data: list[EmbeddingData] = Field(..., description="List of embeddings")
     model: str = Field(..., description="Model used")
     usage: Usage = Field(..., description="Token usage")
 
@@ -60,28 +84,29 @@ class StructurePredictionRequest(BaseModel):
     """Request for structure prediction."""
 
     model: str = Field(..., description="Model ID (e.g., 'esmfold', 'boltz_1')")
-    prompt: Union[str, List[str]] = Field(
-        ..., description="Protein sequence(s) to fold"
-    )
+    prompt: str | list[str] = Field(..., description="Protein sequence(s) to fold")
     temperature: float = Field(
         default=1.0, ge=0.0, le=2.0, description="Sampling temperature"
     )
-    max_tokens: Optional[int] = Field(
+    max_tokens: int | None = Field(
         default=None, description="Maximum structure tokens (if applicable)"
     )
-    user: Optional[str] = Field(default=None, description="User identifier")
+    user: str | None = Field(default=None, description="User identifier")
+
+    @field_validator("prompt")
+    @classmethod
+    def check_prompt(cls, value: str | list[str]) -> str | list[str]:
+        return validate_sequences(value)
 
 
 class StructureData(BaseModel):
     """Structure prediction result."""
 
     pdb: str = Field(..., description="PDB format structure")
-    plddt: Optional[List[float]] = Field(
+    plddt: list[float] | None = Field(
         default=None, description="Per-residue confidence scores (pLDDT)"
     )
-    mean_plddt: Optional[float] = Field(
-        default=None, description="Mean confidence score"
-    )
+    mean_plddt: float | None = Field(default=None, description="Mean confidence score")
 
 
 class StructurePredictionResponse(BaseModel):
@@ -89,7 +114,7 @@ class StructurePredictionResponse(BaseModel):
 
     object: Literal["structure"] = "structure"
     model: str = Field(..., description="Model used")
-    data: List[StructureData] = Field(..., description="Predicted structures")
+    data: list[StructureData] = Field(..., description="Predicted structures")
     usage: Usage = Field(..., description="Token usage")
 
 
@@ -111,7 +136,7 @@ class ModelPermission(BaseModel):
     allow_view: bool = True
     allow_fine_tuning: bool = False
     organization: str = "*"
-    group: Optional[str] = None
+    group: str | None = None
     is_blocking: bool = False
 
 
@@ -122,18 +147,18 @@ class ModelCard(BaseModel):
     object: Literal["model"] = "model"
     created: int = Field(..., description="Unix timestamp of model creation")
     owned_by: str = Field(..., description="Organization that owns the model")
-    permission: List[ModelPermission] = Field(
+    permission: list[ModelPermission] = Field(
         default_factory=list, description="Model permissions"
     )
     root: str = Field(..., description="Root model identifier")
-    parent: Optional[str] = Field(default=None, description="Parent model")
+    parent: str | None = Field(default=None, description="Parent model")
 
 
 class ModelListResponse(BaseModel):
     """List of available models (OpenAI-compatible)."""
 
     object: Literal["list"] = "list"
-    data: List[ModelCard] = Field(..., description="List of models")
+    data: list[ModelCard] = Field(..., description="List of models")
 
 
 # ============================================================================
@@ -146,8 +171,8 @@ class ErrorDetail(BaseModel):
 
     message: str = Field(..., description="Error message")
     type: str = Field(..., description="Error type")
-    param: Optional[str] = Field(default=None, description="Parameter that caused error")
-    code: Optional[str] = Field(default=None, description="Error code")
+    param: str | None = Field(default=None, description="Parameter that caused error")
+    code: str | None = Field(default=None, description="Error code")
 
 
 class ErrorResponse(BaseModel):
